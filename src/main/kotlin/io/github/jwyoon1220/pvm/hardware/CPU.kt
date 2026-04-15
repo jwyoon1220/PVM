@@ -17,6 +17,9 @@ class CPU {
     var eip: Int = 0
     var eflags: Int = 0
 
+    // --- CPU 상태 ---
+    var halted: Boolean = false
+
     // --- 세그먼트 레지스터 (16비트) ---
     var cs: Int = 0
     var ds: Int = 0

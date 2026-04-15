@@ -1,6 +1,5 @@
 package io.github.jwyoon1220.pvm.hardware
 
-import sun.nio.ch.DirectBuffer
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
@@ -32,6 +31,12 @@ class Memory(
         buffer.putInt(address, value)
     }
 
+    /** Copies [bytes] into memory starting at [address]. */
+    fun load(address: Int, bytes: ByteArray) {
+        for (i in bytes.indices) {
+            write8(address + i, bytes[i].toInt())
+        }
+    }
 
     fun dump(address: Int, length: Int, rowSize: Int = 16) {
         println("Memory Dump at ${address.toString(16).uppercase().padStart(8, '0')}:")
