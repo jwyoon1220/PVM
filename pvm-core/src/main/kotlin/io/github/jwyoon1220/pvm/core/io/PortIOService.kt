@@ -42,6 +42,6 @@ class PortIOService : IPortService {
     private fun notifyWatchers(port: Int, value: Int, isWrite: Boolean) {
         val list = watchers[port] ?: return
         val event = PortEvent(port, value, isWrite)
-        for (i in list.indices) list[i].onEvent(event)
+        for (watcher in list) watcher.onEvent(event)
     }
 }

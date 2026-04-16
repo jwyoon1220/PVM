@@ -39,6 +39,6 @@ class InterruptService : IInterruptService {
     private fun notifyWatchers(vector: Int, ctx: VmContext) {
         val list = watchers[vector] ?: return
         val event = InterruptEvent(vector, ctx)
-        for (i in list.indices) list[i].onFired(event)
+        for (watcher in list) watcher.onFired(event)
     }
 }
