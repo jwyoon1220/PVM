@@ -8,6 +8,11 @@
         <option name="modules">
           <set>
             <option value="$PROJECT_DIR$" />
+            <option value="$PROJECT_DIR$/pvm-addons" />
+            <option value="$PROJECT_DIR$/pvm-api" />
+            <option value="$PROJECT_DIR$/pvm-app" />
+            <option value="$PROJECT_DIR$/pvm-core" />
+            <option value="$PROJECT_DIR$/pvm-drivers" />
           </set>
         </option>
         <option name="myGradleHome" value="" />

@@ -1,24 +1,19 @@
 plugins {
-    kotlin("jvm") version "2.3.10"
+    kotlin("jvm") version "2.3.10" apply false
 }
 
-group = "io.github.jwyoon1220"
-version = "1.0-SNAPSHOT"
+subprojects {
+    apply(plugin = "org.jetbrains.kotlin.jvm")
 
-repositories {
-    mavenCentral()
-}
+    repositories {
+        mavenCentral()
+    }
 
-dependencies {
-    testImplementation(kotlin("test"))
-    // Source: https://mvnrepository.com/artifact/it.unimi.dsi/fastutil
-    implementation("it.unimi.dsi:fastutil:8.5.18")
-}
+    extensions.configure<org.jetbrains.kotlin.gradle.dsl.KotlinJvmProjectExtension> {
+        jvmToolchain(21)
+    }
 
-kotlin {
-    jvmToolchain(21)
-}
-
-tasks.test {
-    useJUnitPlatform()
+    tasks.withType<Test> {
+        useJUnitPlatform()
+    }
 }
