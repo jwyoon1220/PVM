@@ -4,9 +4,9 @@ plugins {
 }
 
 dependencies {
-    implementation(project(":v86-core"))
-    implementation(project(":v86-drivers"))
-    implementation(project(":v86-addons"))
+    implementation(project(":pvm-core"))
+    implementation(project(":pvm-drivers"))
+    implementation(project(":pvm-addons"))
 }
 
 application {

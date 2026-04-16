@@ -4,8 +4,8 @@ plugins {
 
 rootProject.name = "parin-v86"
 
-include("v86-api")
-include("v86-core")
-include("v86-drivers")
-include("v86-addons")
-include("v86-app")
+include("pvm-api")
+include("pvm-core")
+include("pvm-drivers")
+include("pvm-addons")
+include("pvm-app")
