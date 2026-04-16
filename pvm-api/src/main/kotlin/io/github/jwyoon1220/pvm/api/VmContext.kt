@@ -28,4 +28,25 @@ interface VmContext {
     fun write8(address: Int, value: Int)
     fun write16(address: Int, value: Int)
     fun write32(address: Int, value: Int)
+
+    // ── Services ────────────────────────────────────────────────────────────
+
+    /**
+     * Memory watcher service — attach listeners to physical address ranges.
+     * Defaults to a no-op implementation so that lightweight [VmContext] stubs
+     * (e.g., in unit tests) do not need to provide a real service.
+     */
+    val memoryService: IMemoryService get() = IMemoryService.NOOP
+
+    /**
+     * Port I/O service — register device handlers and observe port accesses.
+     * Defaults to a no-op implementation.
+     */
+    val portService: IPortService get() = IPortService.NOOP
+
+    /**
+     * Interrupt service — register HLE handlers and observe interrupt firings.
+     * Defaults to a no-op implementation.
+     */
+    val interruptService: IInterruptService get() = IInterruptService.NOOP
 }

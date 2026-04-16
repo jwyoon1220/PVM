@@ -3,28 +3,47 @@ package io.github.jwyoon1220.pvm.app
 import io.github.jwyoon1220.pvm.addons.BiosKeyboardAddon
 import io.github.jwyoon1220.pvm.addons.BiosVideoAddon
 import io.github.jwyoon1220.pvm.addons.DosHleAddon
-import io.github.jwyoon1220.pvm.core.VM
-import io.github.jwyoon1220.pvm.core.memory.MemoryBus
+import io.github.jwyoon1220.pvm.core.VMBuilder
 
 fun main() {
-    VM(memory = MemoryBus(1024 * 1024)).use { vm ->
-        vm.registerAddon(BiosVideoAddon())
-        vm.registerAddon(BiosKeyboardAddon())
-        vm.registerAddon(DosHleAddon())
+    VMBuilder()
+        .memorySize(1024 * 1024)
+        .build()
+        .use { vm ->
+            // ── Memory watcher: observe every VRAM write ────────────────────
+            vm.vmContext.memoryService.addWatcher(0xB8000..0xBFFFF) { e ->
+                println("[MEM] VRAM write @0x${e.address.toString(16)}: 0x${e.value.toString(16)} (${e.byteCount}B)")
+            }
 
-        val program = buildBootProgram()
-        vm.loadAt(0x7C00, program)
+            // ── Port watcher: observe keyboard controller port ──────────────
+            vm.vmContext.portService.addWatcher(0x60) { e ->
+                val dir = if (e.isWrite) "OUT" else "IN"
+                println("[PORT] $dir 0x60 = 0x${e.value.toString(16)}")
+            }
 
-        vm.cpu.esp = 0x7BFC
-        vm.cpu.eip = 0x7C00
-        vm.cpu.cs  = 0x0000
+            // ── Interrupt watcher: trace every INT 10h (video) call ─────────
+            vm.vmContext.interruptService.addWatcher(0x10) { e ->
+                println("[INT] INT 10h — AH=0x${e.context.ah.toString(16)} AL=0x${e.context.al.toString(16)}")
+            }
 
-        println("=== Parin-v86 starting (EIP=0x7C00) ===")
-        vm.run()
-        println()
-        println("=== VM halted ===")
-        vm.cpu.dump()
-    }
+            // ── Register addons (handlers run during vm.run()) ──────────────
+            vm.registerAddon(BiosVideoAddon())
+            vm.registerAddon(BiosKeyboardAddon())
+            vm.registerAddon(DosHleAddon())
+
+            val program = buildBootProgram()
+            vm.loadAt(0x7C00, program)
+
+            vm.cpu.esp = 0x7BFC
+            vm.cpu.eip = 0x7C00
+            vm.cpu.cs  = 0x0000
+
+            println("=== Parin-v86 starting (EIP=0x7C00) ===")
+            vm.run()
+            println()
+            println("=== VM halted ===")
+            vm.cpu.dump()
+        }
 }
 
 private fun buildBootProgram(): ByteArray {

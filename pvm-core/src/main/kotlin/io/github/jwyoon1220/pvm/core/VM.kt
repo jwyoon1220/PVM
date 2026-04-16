@@ -1,6 +1,9 @@
 package io.github.jwyoon1220.pvm.core
 
 import io.github.jwyoon1220.pvm.api.AddonContext
+import io.github.jwyoon1220.pvm.api.IInterruptService
+import io.github.jwyoon1220.pvm.api.IMemoryService
+import io.github.jwyoon1220.pvm.api.IPortService
 import io.github.jwyoon1220.pvm.api.VmAddon
 import io.github.jwyoon1220.pvm.api.VmContext
 import io.github.jwyoon1220.pvm.api.VmInput
@@ -13,9 +16,13 @@ import io.github.jwyoon1220.pvm.core.io.PortIOService
 import io.github.jwyoon1220.pvm.core.io.TerminalInput
 import io.github.jwyoon1220.pvm.core.io.TerminalOutput
 import io.github.jwyoon1220.pvm.core.memory.MemoryBus
+import io.github.jwyoon1220.pvm.core.memory.MemoryService
 
 /**
  * Top-level VM orchestrator.
+ *
+ * Prefer constructing via [VMBuilder] for a fluent, self-documenting setup.
+ * The primary constructor remains available for direct instantiation in tests.
  */
 class VM(
     val memory: MemoryBus = MemoryBus(),
@@ -28,6 +35,9 @@ class VM(
 ) : AutoCloseable {
 
     private val addons = mutableListOf<VmAddon>()
+
+    /** Memory watcher service backed by the physical [MemoryBus]. */
+    val memoryService: MemoryService = MemoryService(memory)
 
     /** Bridge between VmContext (API) and the CPU + MemoryBus (core). */
     val vmContext: VmContext = object : VmContext {
@@ -62,6 +72,9 @@ class VM(
         override fun write8(address: Int, value: Int)  = memory.write8(address, value)
         override fun write16(address: Int, value: Int) = memory.write16(address, value)
         override fun write32(address: Int, value: Int) = memory.write32(address, value)
+        override val memoryService: IMemoryService = this@VM.memoryService
+        override val portService: IPortService = this@VM.ports
+        override val interruptService: IInterruptService = this@VM.interrupts
     }
 
     fun registerAddon(addon: VmAddon) { addons.add(addon); addon.onInit() }
@@ -69,7 +82,7 @@ class VM(
     fun loadAt(address: Int, data: ByteArray) = memory.load(address, data)
 
     fun run() {
-        val ctx = AddonContext(ports, interrupts)
+        val ctx = AddonContext(ports, interrupts, memoryService)
         addons.forEach { it.onLoad() }
         addons.forEach { it.onEnable(ctx) }
         try {
@@ -81,4 +94,3 @@ class VM(
 
     override fun close() = memory.close()
 }
-
