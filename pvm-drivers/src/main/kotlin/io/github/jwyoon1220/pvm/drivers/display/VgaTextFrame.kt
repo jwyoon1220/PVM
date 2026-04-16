@@ -1,6 +1,6 @@
 package io.github.jwyoon1220.pvm.drivers.display
 
-import io.github.jwyoon1220.pvm.api.MemoryAccessor
+import io.github.jwyoon1220.pvm.api.IMemoryService
 import io.github.jwyoon1220.pvm.api.OutputDevice
 import io.github.jwyoon1220.pvm.core.memory.MemoryBus
 import java.awt.Dimension
@@ -13,30 +13,47 @@ import javax.swing.SwingUtilities
 import javax.swing.Timer
 
 /**
- * VGA text-mode display (80x25) backed by VRAM at physical address 0xB8000.
+ * VGA text-mode display (80×25) backed by VRAM at physical address 0xB8000.
+ *
+ * Typical setup:
+ * ```kotlin
+ * val frame = VgaTextFrame(vm.memory)
+ * frame.register(vm.memoryService)   // subscribe to VRAM writes
+ * frame.start()
+ * ```
+ *
+ * A 60 fps Swing [Timer] re-renders only dirty cells into a [BufferedImage]
+ * back-buffer, then repaints the window.  The dirty set is populated by the
+ * [IMemoryService] watcher installed via [register].
  */
 class VgaTextFrame(private val memory: MemoryBus) : JFrame("Parin-v86"), OutputDevice {
 
     companion object {
-        const val VRAM_BASE   = 0xB8000
-        const val COLS        = 80
-        const val ROWS        = 25
-        const val CELLS       = COLS * ROWS
-        const val VRAM_BYTES  = CELLS * 2
-        const val CHAR_W      = 9
-        const val CHAR_H      = 16
+        const val VRAM_BASE  = 0xB8000
+        const val COLS       = 80
+        const val ROWS       = 25
+        const val CELLS      = COLS * ROWS
+        const val VRAM_BYTES = CELLS * 2
+        const val CHAR_W     = 9
+        const val CHAR_H     = 16
     }
 
-    private val backBuffer = BufferedImage(COLS * CHAR_W, ROWS * CHAR_H, BufferedImage.TYPE_INT_RGB)
-    private val dirtyBits  = BitSet(CELLS)
-    private val font       = Font(Font.MONOSPACED, Font.PLAIN, CHAR_H - 2)
+    private val backBuffer  = BufferedImage(COLS * CHAR_W, ROWS * CHAR_H, BufferedImage.TYPE_INT_RGB)
+    private val dirtyBits   = BitSet(CELLS)
+    private val font        = Font(Font.MONOSPACED, Font.PLAIN, CHAR_H - 2)
     private var renderTimer: Timer? = null
 
-    val vramAccessor: MemoryAccessor = MemoryAccessor { address, _, byteCount ->
-        val startCell = (address - VRAM_BASE) / 2
-        val endCell   = (address - VRAM_BASE + byteCount - 1) / 2
-        for (cell in startCell..endCell) {
-            if (cell in 0 until CELLS) dirtyBits.set(cell)
+    /**
+     * Subscribes to VRAM writes in [0xB8000, 0xB8000+VRAM_BYTES).
+     * Must be called before [start].
+     */
+    fun register(memoryService: IMemoryService) {
+        memoryService.addWatcher(VRAM_BASE until VRAM_BASE + VRAM_BYTES) { event ->
+            val startCell = (event.address - VRAM_BASE) / 2
+            val endCell   = (event.address - VRAM_BASE + event.byteCount - 1) / 2
+            for (cell in startCell..endCell) {
+                if (cell in 0 until CELLS) dirtyBits.set(cell)
+            }
         }
     }
 
@@ -45,7 +62,7 @@ class VgaTextFrame(private val memory: MemoryBus) : JFrame("Parin-v86"), OutputD
         isResizable = false
         contentPane.preferredSize = Dimension(COLS * CHAR_W, ROWS * CHAR_H)
         pack()
-        dirtyBits.set(0, CELLS)
+        dirtyBits.set(0, CELLS)  // force full repaint on first frame
     }
 
     override fun start() {
