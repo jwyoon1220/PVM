@@ -7,7 +7,7 @@ import java.nio.ByteOrder
 
 /**
  * Physical memory implemented as an off-heap Panama MemorySegment.
- * All multi-byte reads/writes use little-endian byte order to match x86.
+ * All multibyte reads/writes use little-endian byte order to match x86.
  *
  * Write listeners (MemoryAccessor) are notified for every write that
  * overlaps their registered physical address range.

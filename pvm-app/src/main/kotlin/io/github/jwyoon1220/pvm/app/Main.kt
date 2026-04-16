@@ -3,11 +3,11 @@ package io.github.jwyoon1220.pvm.app
 import io.github.jwyoon1220.pvm.addons.BiosKeyboardAddon
 import io.github.jwyoon1220.pvm.addons.BiosVideoAddon
 import io.github.jwyoon1220.pvm.addons.DosHleAddon
-import io.github.jwyoon1220.pvm.core.Vm
+import io.github.jwyoon1220.pvm.core.VM
 import io.github.jwyoon1220.pvm.core.memory.MemoryBus
 
 fun main() {
-    Vm(memory = MemoryBus(1024 * 1024)).use { vm ->
+    VM(memory = MemoryBus(1024 * 1024)).use { vm ->
         vm.registerAddon(BiosVideoAddon())
         vm.registerAddon(BiosKeyboardAddon())
         vm.registerAddon(DosHleAddon())

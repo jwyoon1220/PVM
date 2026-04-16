@@ -13,7 +13,7 @@ import io.github.jwyoon1220.pvm.core.memory.MemoryBus
 /**
  * Top-level VM orchestrator.
  */
-class Vm(
+class VM(
     val memory: MemoryBus = MemoryBus(),
     val cpu: CPU = CPU(),
     val ports: PortIOService = PortIOService(),

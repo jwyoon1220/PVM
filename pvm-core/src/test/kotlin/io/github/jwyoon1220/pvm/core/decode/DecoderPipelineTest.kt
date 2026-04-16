@@ -1,7 +1,7 @@
 package io.github.jwyoon1220.pvm.core.decode
 
 import io.github.jwyoon1220.pvm.api.VmContext
-import io.github.jwyoon1220.pvm.core.Vm
+import io.github.jwyoon1220.pvm.core.VM
 import io.github.jwyoon1220.pvm.core.cpu.CPU
 import io.github.jwyoon1220.pvm.core.io.InterruptService
 import io.github.jwyoon1220.pvm.core.io.PortIOService
@@ -12,7 +12,7 @@ import kotlin.test.assertTrue
 
 class DecoderPipelineTest {
 
-    private fun makeVm(memSize: Int = 1024 * 1024): Vm = Vm(memory = MemoryBus(memSize))
+    private fun makeVm(memSize: Int = 1024 * 1024): VM = VM(memory = MemoryBus(memSize))
 
     private fun makeVmContext(cpu: CPU, memory: MemoryBus): VmContext = object : VmContext {
         override var eax get() = cpu.eax; set(v) { cpu.eax = v }
