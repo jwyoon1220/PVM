@@ -11,6 +11,7 @@ import io.github.jwyoon1220.pvm.api.VmOutput
 import io.github.jwyoon1220.pvm.core.cpu.CPU
 import io.github.jwyoon1220.pvm.core.engine.ExecutionEngine
 import io.github.jwyoon1220.pvm.core.engine.InterpreterEngine
+import io.github.jwyoon1220.pvm.core.engine.JitEngine
 import io.github.jwyoon1220.pvm.core.io.InterruptService
 import io.github.jwyoon1220.pvm.core.io.PortIOService
 import io.github.jwyoon1220.pvm.core.io.TerminalInput

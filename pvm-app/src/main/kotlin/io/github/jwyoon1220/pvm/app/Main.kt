@@ -3,11 +3,14 @@ package io.github.jwyoon1220.pvm.app
 import io.github.jwyoon1220.pvm.addons.BiosKeyboardAddon
 import io.github.jwyoon1220.pvm.addons.BiosVideoAddon
 import io.github.jwyoon1220.pvm.addons.DosHleAddon
+import io.github.jwyoon1220.pvm.api.VmOutput
 import io.github.jwyoon1220.pvm.core.VMBuilder
+import io.github.jwyoon1220.pvm.core.io.SwingTerminalOutput
 
 fun main() {
     VMBuilder()
         .memorySize(1024 * 1024)
+        .output(SwingTerminalOutput())
         .build()
         .use { vm ->
             // ── Memory watcher: observe every VRAM write ────────────────────
@@ -47,7 +50,7 @@ fun main() {
 }
 
 private fun buildBootProgram(): ByteArray {
-    val msg = "Hello, BIOS!\r\n"
+    val msg = "Aoi Kaje!\r\n"
     val bytes = mutableListOf<Byte>()
 
     for (ch in msg) {
