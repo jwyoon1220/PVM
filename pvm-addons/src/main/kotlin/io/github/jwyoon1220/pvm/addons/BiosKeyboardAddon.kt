@@ -17,12 +17,15 @@ class BiosKeyboardAddon : VmAddon {
     private fun handle(ctx: VmContext) {
         when (ctx.ah) {
             0x00 -> {
-                val ch = System.`in`.read()
-                ctx.al = ch and 0xFF
+                ctx.al = ctx.input.read() and 0xFF
                 ctx.ah = 0
             }
             0x01 -> {
-                ctx.eflags = ctx.eflags or (1 shl 6)
+                if (ctx.input.hasInput()) {
+                    ctx.eflags = ctx.eflags and (1 shl 6).inv()
+                } else {
+                    ctx.eflags = ctx.eflags or (1 shl 6)
+                }
             }
             else -> throw UnsupportedOperationException(String.format("INT 16h AH=%02Xh not implemented", ctx.ah))
         }

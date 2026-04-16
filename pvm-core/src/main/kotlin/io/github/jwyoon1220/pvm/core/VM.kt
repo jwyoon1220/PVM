@@ -3,11 +3,15 @@ package io.github.jwyoon1220.pvm.core
 import io.github.jwyoon1220.pvm.api.AddonContext
 import io.github.jwyoon1220.pvm.api.VmAddon
 import io.github.jwyoon1220.pvm.api.VmContext
+import io.github.jwyoon1220.pvm.api.VmInput
+import io.github.jwyoon1220.pvm.api.VmOutput
 import io.github.jwyoon1220.pvm.core.cpu.CPU
 import io.github.jwyoon1220.pvm.core.engine.ExecutionEngine
 import io.github.jwyoon1220.pvm.core.engine.InterpreterEngine
 import io.github.jwyoon1220.pvm.core.io.InterruptService
 import io.github.jwyoon1220.pvm.core.io.PortIOService
+import io.github.jwyoon1220.pvm.core.io.TerminalInput
+import io.github.jwyoon1220.pvm.core.io.TerminalOutput
 import io.github.jwyoon1220.pvm.core.memory.MemoryBus
 
 /**
@@ -18,7 +22,9 @@ class VM(
     val cpu: CPU = CPU(),
     val ports: PortIOService = PortIOService(),
     val interrupts: InterruptService = InterruptService(),
-    private val engine: ExecutionEngine = InterpreterEngine()
+    private val engine: ExecutionEngine = InterpreterEngine(),
+    vmInput: VmInput = TerminalInput(),
+    vmOutput: VmOutput = TerminalOutput()
 ) : AutoCloseable {
 
     private val addons = mutableListOf<VmAddon>()
@@ -48,6 +54,8 @@ class VM(
         override var dl get() = cpu.dl; set(v) { cpu.dl = v }
         override var dh get() = cpu.dh; set(v) { cpu.dh = v }
         override var halted get() = cpu.halted; set(v) { cpu.halted = v }
+        override val input: VmInput = vmInput
+        override val output: VmOutput = vmOutput
         override fun read8(address: Int)  = memory.read8(address)
         override fun read16(address: Int) = memory.read16(address)
         override fun read32(address: Int) = memory.read32(address)
@@ -73,3 +81,4 @@ class VM(
 
     override fun close() = memory.close()
 }
+

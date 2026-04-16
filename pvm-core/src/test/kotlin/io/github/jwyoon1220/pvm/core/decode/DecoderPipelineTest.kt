@@ -1,6 +1,8 @@
 package io.github.jwyoon1220.pvm.core.decode
 
 import io.github.jwyoon1220.pvm.api.VmContext
+import io.github.jwyoon1220.pvm.api.VmInput
+import io.github.jwyoon1220.pvm.api.VmOutput
 import io.github.jwyoon1220.pvm.core.VM
 import io.github.jwyoon1220.pvm.core.cpu.CPU
 import io.github.jwyoon1220.pvm.core.io.InterruptService
@@ -38,6 +40,11 @@ class DecoderPipelineTest {
         override var dl get() = cpu.dl; set(v) { cpu.dl = v }
         override var dh get() = cpu.dh; set(v) { cpu.dh = v }
         override var halted get() = cpu.halted; set(v) { cpu.halted = v }
+        override val input: VmInput = object : VmInput {
+            override fun read() = -1
+            override fun hasInput() = false
+        }
+        override val output: VmOutput = VmOutput { /* discard */ }
         override fun read8(a: Int)  = memory.read8(a)
         override fun read16(a: Int) = memory.read16(a)
         override fun read32(a: Int) = memory.read32(a)

@@ -20,10 +20,10 @@ class BiosVideoAddon : VmAddon {
             0x00 -> currentMode = ctx.al
             0x0E -> {
                 when (val ch = ctx.al.toChar()) {
-                    '\r' -> print('\r')
-                    '\n' -> println()
-                    '\u0008' -> print('\b')
-                    else -> print(ch)
+                    '\r' -> ctx.output.write('\r')
+                    '\n' -> ctx.output.write('\n')
+                    '\u0008' -> ctx.output.write('\b')
+                    else -> ctx.output.write(ch)
                 }
             }
             0x0F -> { ctx.al = currentMode; ctx.ah = 80; ctx.bh = 0 }

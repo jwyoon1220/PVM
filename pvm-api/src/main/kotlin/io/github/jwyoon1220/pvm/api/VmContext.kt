@@ -2,7 +2,7 @@ package io.github.jwyoon1220.pvm.api
 
 /**
  * Facade over the live VM state, passed to [InterruptHandler] and [PortIOHandler].
- * Implementations are provided by v86-core.
+ * Implementations are provided by pvm-core.
  */
 interface VmContext {
     // General-purpose registers
@@ -17,6 +17,10 @@ interface VmContext {
     var dx: Int; var dl: Int; var dh: Int
 
     var halted: Boolean
+
+    /** Injected I/O — swap out for Swing, LWJGL, terminal, etc. */
+    val input: VmInput
+    val output: VmOutput
 
     fun read8(address: Int): Int
     fun read16(address: Int): Int

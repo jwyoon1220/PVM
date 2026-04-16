@@ -17,17 +17,16 @@ class DosHleAddon : VmAddon {
     private fun handle(ctx: VmContext) {
         when (ctx.ah) {
             0x01 -> {
-                val ch = System.`in`.read()
-                ctx.al = ch and 0xFF
-                print(ctx.al.toChar())
+                ctx.al = ctx.input.read() and 0xFF
+                ctx.output.write(ctx.al.toChar())
             }
-            0x02 -> print(ctx.dl.toChar())
+            0x02 -> ctx.output.write(ctx.dl.toChar())
             0x09 -> {
                 var addr = ctx.edx
                 while (true) {
                     val ch = ctx.read8(addr++)
                     if (ch == '$'.code) break
-                    print(ch.toChar())
+                    ctx.output.write(ch.toChar())
                 }
             }
             0x4C -> ctx.halted = true
