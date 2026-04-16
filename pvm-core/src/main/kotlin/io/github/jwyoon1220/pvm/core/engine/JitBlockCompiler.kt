@@ -62,7 +62,7 @@ internal class JitBlockCompiler(private val loader: JitClassLoader) {
     // ── class-level generation ───────────────────────────────────────────────
 
     private fun generateClass(className: String, block: BlockScanner.BasicBlock): ByteArray {
-        // COMPUTE_MAXS only: we skip COMPUTE_FRAMES and instead use class version V7 (Java 7)
+        // COMPUTE_MAXS only: we skip COMPUTE_FRAMES and instead use class version V1_5 (Java 5)
         // which does NOT require StackMapTable attributes. This avoids the complexity of
         // manually emitting frames or triggering ASM's getCommonSuperClass for our types.
         val cw = ClassWriter(ClassWriter.COMPUTE_MAXS)
