@@ -228,7 +228,7 @@ class GraphicsModeTest {
         val cursor = makeCursor()
         "HELLO".forEach { cursor.write(it) }
         "HELLO".forEachIndexed { i, ch ->
-            assertEquals(ch.code, cursor.memory.read8(cell(i, 0)), "char[$i]")
+            assertEquals(ch.code, cursor.memory.read8(cell(i, 0)), "char at ($i,0)")
         }
         cursor.memory.close()
     }
