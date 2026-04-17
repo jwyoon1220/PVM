@@ -5,70 +5,127 @@ import io.github.jwyoon1220.pvm.addons.BiosKeyboardAddon
 import io.github.jwyoon1220.pvm.addons.BiosSystemAddon
 import io.github.jwyoon1220.pvm.addons.BiosVideoAddon
 import io.github.jwyoon1220.pvm.addons.DosHleAddon
-import io.github.jwyoon1220.pvm.core.VMBuilder
-import io.github.jwyoon1220.pvm.core.io.TerminalOutput
+import io.github.jwyoon1220.pvm.core.VM
+import io.github.jwyoon1220.pvm.core.memory.MemoryBus
 import io.github.jwyoon1220.pvm.drivers.display.VgaTextFrame
 
+/**
+ * Parin-v86 launcher — graphics mode demo.
+ *
+ * [VgaTextFrame] now implements both [io.github.jwyoon1220.pvm.api.VmOutput]
+ * (HLE character writes via [VgaTextFrame.write]) and
+ * [io.github.jwyoon1220.pvm.api.OutputDevice] (LLE VRAM-backed rendering), so
+ * it is the single display object for both paths.
+ *
+ * Because [VgaTextFrame] needs the [MemoryBus] at construction time (to write
+ * HLE chars directly into VRAM), and [VM] also needs the same [MemoryBus],
+ * we create [MemoryBus] first and wire it into both.
+ *
+ * The boot program below is a pure INT 10h demo:
+ *  - AH=00h  — set 80x25 text mode
+ *  - AH=09h  — write coloured characters N times at cursor
+ *  - AH=02h/03h — set/get cursor position
+ *  - AH=0Eh  — TTY-style write for the final status line
+ */
 fun main() {
-    VMBuilder()
-        .memorySize(1024 * 1024)
-        // TerminalOutput is the HLE fallback (used by DosHleAddon INT 21h writes).
-        // VgaTextFrame below handles the LLE display driven by VRAM.
-        .output(TerminalOutput())
-        .build()
-        .use { vm ->
-            // ── LLE display: subscribe to VRAM writes, render at 60 fps ────
-            val vgaFrame = VgaTextFrame(vm.memory)
-            vgaFrame.register(vm.memoryService)
-            vgaFrame.start()
+    // Create MemoryBus first so we can wire it into both the display and the VM.
+    val memory  = MemoryBus(1024 * 1024)
 
-            // ── Port watcher: observe keyboard controller port ──────────────
-            vm.vmContext.portService.addWatcher(0x60) { e ->
-                val dir = if (e.isWrite) "OUT" else "IN"
-                println("[PORT] $dir 0x60 = 0x${e.value.toString(16)}")
-            }
+    // Unified display: handles both LLE VRAM rendering and HLE VmOutput writes.
+    val display = VgaTextFrame(memory)
 
-            // ── Interrupt watcher: trace INT 10h calls ──────────────────────
-            vm.vmContext.interruptService.addWatcher(0x10) { e ->
-                println("[INT] INT 10h — AH=0x${e.context.ah.toString(16)} AL=0x${e.context.al.toString(16)}")
-            }
+    // Pass display as VmOutput so DosHleAddon INT 21h writes also land here.
+    val vm = VM(memory = memory, vmOutput = display)
 
-            // ── Register addons ──────────────────────────────────────────────
-            vm.registerAddon(BiosVideoAddon())
-            vm.registerAddon(BiosKeyboardAddon())
-            vm.registerAddon(DosHleAddon())
-            vm.registerAddon(BiosDiskAddon())
-            vm.registerAddon(BiosSystemAddon())
+    vm.use {
+        // Subscribe display to VRAM writes for LLE rendering.
+        display.register(vm.memoryService)
 
-            val program = buildBootProgram()
-            vm.loadAt(0x7C00, program)
-
-            vm.cpu.esp = 0x7BFC
-            vm.cpu.eip = 0x7C00
-            vm.cpu.cs  = 0x0000
-
-            println("=== Parin-v86 starting (EIP=0x7C00) ===")
-            vm.run()
-            println()
-            println("=== VM halted ===")
-            vm.cpu.dump()
+        // Interrupt watcher: trace INT 10h calls to stdout for debugging.
+        vm.vmContext.interruptService.addWatcher(0x10) { e ->
+            println("[INT] INT 10h AH=0x${e.context.ah.toString(16).padStart(2,'0')} AL=0x${e.context.al.toString(16).padStart(2,'0')}")
         }
+
+        vm.registerAddon(BiosVideoAddon())
+        vm.registerAddon(BiosKeyboardAddon())
+        vm.registerAddon(DosHleAddon())
+        vm.registerAddon(BiosDiskAddon())
+        vm.registerAddon(BiosSystemAddon())
+
+        val program = buildGraphicsModeProgram()
+        vm.loadAt(0x7C00, program)
+
+        vm.cpu.esp = 0x7BFC
+        vm.cpu.eip = 0x7C00
+        vm.cpu.cs  = 0x0000
+
+        // Show the VGA window and start the 60 fps render timer.
+        display.start()
+
+        println("=== Parin-v86 starting (EIP=0x7C00, graphics mode demo) ===")
+        vm.run()
+        println()
+        println("=== VM halted ===")
+        vm.cpu.dump()
+    }
 }
 
-private fun buildBootProgram(): ByteArray {
-    val msg   = "Aoi Kaje!\r\n"
+// ────────────────────────────────────────────────────────────────────────────
+// Graphics mode demo program
+//
+// Attribute byte:  bits 7-4 = background colour index
+//                  bits 3-0 = foreground colour index
+//   0x4F = bright-white (0xF) on red  (4)
+//   0x2E = yellow       (0xE) on green(2)
+//   0x1B = cyan         (0xB) on blue (1)
+//   0x70 = black        (0x0) on light-grey (7)
+//
+// INT 10h AH=09h does NOT advance the cursor, so we follow every write with
+// AH=03h (get cursor) + ADD DL,1 + AH=02h (set cursor).
+// ────────────────────────────────────────────────────────────────────────────
+
+private fun buildGraphicsModeProgram(): ByteArray {
     val bytes = mutableListOf<Byte>()
 
-    for (ch in msg) {
-        bytes += 0xB4.toByte()        // MOV AH, 0Eh
-        bytes += 0x0E.toByte()
-        bytes += 0xB0.toByte()        // MOV AL, ch
-        bytes += ch.code.toByte()
-        bytes += 0xCD.toByte()        // INT 10h
-        bytes += 0x10.toByte()
-    }
-    bytes += 0xF4.toByte()            // HLT
+    fun emit(vararg b: Byte) = bytes.addAll(b.asList())
 
+    // Set video mode 03h (80x25 colour text, clears screen)
+    emit(0xB4.toByte(), 0x00, 0xB0.toByte(), 0x03, 0xCD.toByte(), 0x10)
+
+    data class ColourRow(val text: String, val attr: Int, val row: Int)
+    val rows = listOf(
+        ColourRow("  Parin-v86 VGA Text Mode Demo  ", 0x4F, 1),
+        ColourRow("  Written in Kotlin -- WORA JVM ", 0x2E, 2),
+        ColourRow("  80 x 25  CGA/VGA Colour Text  ", 0x1B, 3),
+        ColourRow("  Press any key to continue...  ", 0x70, 5)
+    )
+
+    for (row in rows) {
+        // AH=02h: set cursor to (row, col=0)
+        emit(0xB4.toByte(), 0x02, 0xB6.toByte(), row.row.toByte(), 0xB2.toByte(), 0x00, 0xCD.toByte(), 0x10)
+        for (ch in row.text) {
+            // AH=09h: write char+attr, CX=1
+            emit(
+                0xB4.toByte(), 0x09,
+                0xB0.toByte(), ch.code.toByte(),
+                0xB3.toByte(), row.attr.toByte(),
+                0xB9.toByte(), 0x01, 0x00, 0x00, 0x00,
+                0xCD.toByte(), 0x10
+            )
+            // Advance cursor: AH=03h get, ADD DL,1, AH=02h set
+            emit(
+                0xB4.toByte(), 0x03, 0xCD.toByte(), 0x10,
+                0x80.toByte(), 0xC2.toByte(), 0x01,
+                0xB4.toByte(), 0x02, 0xCD.toByte(), 0x10
+            )
+        }
+    }
+
+    // TTY-write the final status line (AH=0Eh)
+    for (ch in "\r\n\r\nBoot finished. VM halting.\r\n") {
+        emit(0xB4.toByte(), 0x0E, 0xB0.toByte(), ch.code.toByte(), 0xCD.toByte(), 0x10)
+    }
+
+    bytes.add(0xF4.toByte())   // HLT
     return bytes.toByteArray()
 }
-

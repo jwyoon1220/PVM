@@ -2,6 +2,7 @@ package io.github.jwyoon1220.pvm.drivers.display
 
 import io.github.jwyoon1220.pvm.api.IMemoryService
 import io.github.jwyoon1220.pvm.api.OutputDevice
+import io.github.jwyoon1220.pvm.api.VmOutput
 import io.github.jwyoon1220.pvm.core.memory.MemoryBus
 import java.awt.Dimension
 import java.awt.Font
@@ -15,18 +16,26 @@ import javax.swing.Timer
 /**
  * VGA text-mode display (80×25) backed by VRAM at physical address 0xB8000.
  *
- * Typical setup:
+ * This class serves as **both** an LLE display driver (reads VRAM via
+ * [MemoryBus]) and an HLE [VmOutput] sink.  When [write] is called by guest
+ * software that bypasses BIOS interrupts, characters are written directly into
+ * the VRAM region of [MemoryBus], triggering the dirty-bit watcher so the next
+ * 60 fps render tick picks them up automatically.
+ *
+ * Typical setup (replaces both TerminalOutput and a separate display object):
  * ```kotlin
- * val frame = VgaTextFrame(vm.memory)
- * frame.register(vm.memoryService)   // subscribe to VRAM writes
- * frame.start()
+ * val display = VgaTextFrame(vm.memory)
+ * display.register(vm.memoryService)   // subscribe to VRAM writes for rendering
+ * // use as VmOutput in the VM builder:
+ * VMBuilder().output(display).build()
+ * display.start()                      // show window and start 60 fps timer
  * ```
  *
- * A 60 fps Swing [Timer] re-renders only dirty cells into a [BufferedImage]
- * back-buffer, then repaints the window.  The dirty set is populated by the
- * [IMemoryService] watcher installed via [register].
+ * The window is **not visible until [start] is called**, so creating a
+ * [VgaTextFrame] for unit-testing purposes (without a display) is safe as long
+ * as [start] is not invoked.
  */
-class VgaTextFrame(private val memory: MemoryBus) : JFrame("Parin-v86"), OutputDevice {
+class VgaTextFrame(private val memory: MemoryBus) : JFrame("Parin-v86"), OutputDevice, VmOutput {
 
     companion object {
         const val VRAM_BASE  = 0xB8000
@@ -43,6 +52,17 @@ class VgaTextFrame(private val memory: MemoryBus) : JFrame("Parin-v86"), OutputD
     private val font        = Font(Font.MONOSPACED, Font.PLAIN, CHAR_H - 2)
     private var renderTimer: Timer? = null
 
+    // ── HLE VmOutput cursor state ─────────────────────────────────────────────
+    // Delegates to VramCursor, which writes char+attr bytes directly into the
+    // MemoryBus VRAM region.  The dirty-bit watcher installed via register()
+    // marks the affected cells for the next render tick — no separate code path.
+    private val hleCursor = VramCursor(memory)
+
+    /** Text attribute byte used for HLE writes: light-grey (7) on black (0). */
+    var hleAttr: Int
+        get() = hleCursor.attr
+        set(v) { hleCursor.attr = v }
+
     /**
      * Subscribes to VRAM writes in [0xB8000, 0xB8000+VRAM_BYTES).
      * Must be called before [start].
@@ -56,6 +76,19 @@ class VgaTextFrame(private val memory: MemoryBus) : JFrame("Parin-v86"), OutputD
             }
         }
     }
+
+    /**
+     * HLE [VmOutput] implementation.
+     *
+     * Delegates to [VramCursor], which writes the character directly into
+     * [MemoryBus] at the current cursor position inside the VRAM region.
+     * The [IMemoryService] watcher installed via [register] marks the affected
+     * cell dirty so it is included in the next render tick.
+     *
+     * Control characters: `\r` carriage-return, `\n` line-feed (no auto-scroll,
+     * wraps to row 0), `\b` backspace (erase previous cell).
+     */
+    override fun write(ch: Char) = hleCursor.write(ch)
 
     init {
         defaultCloseOperation = EXIT_ON_CLOSE

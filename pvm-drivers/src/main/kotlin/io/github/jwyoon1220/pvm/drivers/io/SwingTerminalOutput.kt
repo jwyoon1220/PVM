@@ -1,5 +1,6 @@
 package io.github.jwyoon1220.pvm.drivers.io
 
+import io.github.jwyoon1220.pvm.api.OutputDevice
 import io.github.jwyoon1220.pvm.api.VmOutput
 import java.awt.Color
 import java.awt.Font
@@ -11,21 +12,25 @@ import javax.swing.JPanel
 import javax.swing.SwingUtilities
 
 /**
- * Swing-backed [VmOutput] that renders characters onto a fixed 80×25 grid
- * using [Graphics2D].
+ * Swing-backed [VmOutput] + [OutputDevice] that renders characters onto a
+ * fixed 80×25 character grid using [Graphics2D].
  *
  * **No auto-scroll.** This implementation emulates bare VGA text-mode
  * hardware: when the cursor reaches the last row it wraps back to row 0.
  * Scrolling is the responsibility of the guest software (e.g. via BIOS
  * INT 10h AH=06h "Scroll Up Window") — exactly as real hardware behaves.
  *
- * For LLE display backed by VRAM writes, prefer [VgaTextFrame] instead.
+ * **The window is not shown until [start] is called.** Creating a
+ * [SwingTerminalOutput] does not open any window, so it is safe to
+ * instantiate it before calling [start].
+ *
+ * For LLE display backed by VRAM writes, prefer [io.github.jwyoon1220.pvm.drivers.display.VgaTextFrame] instead.
  */
 class SwingTerminalOutput(
     private val columns: Int = 80,
     private val rows: Int = 25,
     title: String = "PVM Terminal"
-) : JFrame(title), VmOutput {
+) : JFrame(title), VmOutput, OutputDevice {
 
     // Character + colour buffers for the fixed-size screen
     private val charBuffer  = Array(rows) { CharArray(columns) { ' ' } }
@@ -71,12 +76,22 @@ class SwingTerminalOutput(
     init {
         defaultCloseOperation = EXIT_ON_CLOSE
         add(renderPanel)
-        val fm          = getFontMetrics(renderPanel.font)
-        val windowWidth = columns * fm.charWidth('W') + insets.left + insets.right + 20
+        val fm           = getFontMetrics(renderPanel.font)
+        val windowWidth  = columns * fm.charWidth('W') + insets.left + insets.right + 20
         val windowHeight = rows * fm.height + insets.top + insets.bottom + 40
         setSize(windowWidth, windowHeight)
         setLocationRelativeTo(null)
-        isVisible = true
+        // Window is NOT shown here — call start() to make it visible.
+    }
+
+    /** Shows the terminal window. */
+    override fun start() {
+        SwingUtilities.invokeLater { isVisible = true }
+    }
+
+    /** Hides and disposes the terminal window. */
+    override fun stop() {
+        SwingUtilities.invokeLater { dispose() }
     }
 
     override fun write(ch: Char) {
