@@ -213,4 +213,78 @@ class DecoderPipelineTest {
         assertEquals(0, vm.cpu.al)
         vm.close()
     }
+
+    @Test
+    fun `ADD DL 1 via opcode 0x80 works correctly`() {
+        val vm = makeVm()
+        vm.cpu.edx = 5
+        vm.memory.write8(0, 0x80); vm.memory.write8(1, 0xC2); vm.memory.write8(2, 0x01)  // ADD DL, 1
+        vm.memory.write8(3, 0xF4)
+        vm.cpu.eip = 0
+        vm.run()
+        assertEquals(6, vm.cpu.dl)
+        vm.close()
+    }
+
+    @Test
+    fun `XOR EAX EAX zeroes register and sets ZF`() {
+        val vm = makeVm()
+        vm.cpu.eax = 0x12345678
+        vm.memory.write8(0, 0x31); vm.memory.write8(1, 0xC0)  // XOR EAX, EAX
+        vm.memory.write8(2, 0xF4)
+        vm.cpu.eip = 0
+        vm.run()
+        assertEquals(0, vm.cpu.eax)
+        assertEquals(1, (vm.cpu.eflags shr 6) and 1)
+        vm.close()
+    }
+
+    @Test
+    fun `AND AL imm8 masks lower byte`() {
+        val vm = makeVm()
+        vm.cpu.eax = 0xFF
+        vm.memory.write8(0, 0x24); vm.memory.write8(1, 0x0F)  // AND AL, 0x0F
+        vm.memory.write8(2, 0xF4)
+        vm.cpu.eip = 0
+        vm.run()
+        assertEquals(0x0F, vm.cpu.al)
+        vm.close()
+    }
+
+    @Test
+    fun `SHL EAX 1 doubles value`() {
+        val vm = makeVm()
+        vm.cpu.eax = 5
+        vm.memory.write8(0, 0xD1); vm.memory.write8(1, 0xE0)  // SHL EAX, 1
+        vm.memory.write8(2, 0xF4)
+        vm.cpu.eip = 0
+        vm.run()
+        assertEquals(10, vm.cpu.eax)
+        vm.close()
+    }
+
+    @Test
+    fun `LEA loads effective address`() {
+        val vm = makeVm()
+        vm.cpu.ebx = 0x100; vm.cpu.ecx = 4
+        // LEA EAX, [EBX + ECX*2 + 8]  -> 8D 44 4B 08
+        vm.memory.write8(0, 0x8D); vm.memory.write8(1, 0x44); vm.memory.write8(2, 0x4B); vm.memory.write8(3, 0x08)
+        vm.memory.write8(4, 0xF4)
+        vm.cpu.eip = 0
+        vm.run()
+        assertEquals(0x100 + 4*2 + 8, vm.cpu.eax)
+        vm.close()
+    }
+
+    @Test
+    fun `JMP rel32 jumps to far target`() {
+        val vm = makeVm()
+        vm.memory.write8(0, 0xE9); vm.memory.write32(1, 10)  // JMP +10 (to offset 15)
+        vm.memory.write8(15, 0xBB); vm.memory.write32(16, 0x1234)  // MOV EBX, 0x1234
+        vm.memory.write8(20, 0xF4)
+        vm.cpu.eip = 0
+        vm.run()
+        assertEquals(0x1234, vm.cpu.ebx)
+        vm.close()
+    }
 }
