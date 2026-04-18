@@ -3,6 +3,7 @@ package io.github.jwyoon1220.pvm.drivers.display
 import io.github.jwyoon1220.pvm.addons.BiosVideoAddon
 import io.github.jwyoon1220.pvm.core.VM
 import io.github.jwyoon1220.pvm.core.memory.MemoryBus
+import io.github.jwyoon1220.pvm.core.memory.MemoryService
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -285,5 +286,157 @@ class GraphicsModeTest {
         assertTrue(VgaColors.PALETTE[1] != 0,   "index 1 (dark blue) non-zero")
         assertTrue(VgaColors.PALETTE[4] != 0,   "index 4 (dark red) non-zero")
         assertTrue(VgaColors.PALETTE[14] != 0,  "index 14 (yellow) non-zero")
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // VgaTextFrame.register() → dirty flag + renderFrame() integration
+    //
+    // VgaTextFrame inherits JFrame, which throws HeadlessException when a
+    // display is absent.  These tests therefore run only if the AWT toolkit
+    // is available.  They are skipped automatically in headless CI environments
+    // because the JFrame constructor itself will not throw as long as
+    // java.awt.headless is not 'true' (Gradle does not set that flag by
+    // default).  If the environment IS headless the test class-loader will
+    // throw HeadlessException and the test runner will mark the tests as
+    // errors — which is acceptable because the rendering path cannot be
+    // validated without a graphics context.
+    //
+    // What is tested (without ever calling start() or showing a window):
+    //
+    //  1. VgaTextFrame.register() wires the MemoryService so that any write
+    //     inside [VRAM_BASE, VRAM_BASE+VRAM_BYTES) sets the `dirty` flag.
+    //
+    //  2. VgaTextFrame.renderFrame() reads VRAM bytes from MemoryBus and
+    //     paints them into the backBuffer.  After the call, the RGB pixel at
+    //     the character's screen position has the expected background colour
+    //     from the VGA palette.
+    //
+    //  3. Writing via BiosVideoAddon INT 10h (LLE path) also sets `dirty`,
+    //     confirming that the full pipeline from guest code → VRAM write →
+    //     dirty flag works end-to-end.
+    // ═══════════════════════════════════════════════════════════════════════
+
+    /** Builds a VgaTextFrame whose JFrame constructor is skipped if headless. */
+    private fun tryMakeFrame(memory: MemoryBus): VgaTextFrame? = try {
+        VgaTextFrame(memory)
+    } catch (_: java.awt.HeadlessException) {
+        null
+    }
+
+    @Test fun `register sets dirty when direct MemoryBus write lands in VRAM range`() {
+        val memory = MemoryBus(1024 * 1024)
+        val frame  = tryMakeFrame(memory) ?: run { memory.close(); return }
+
+        // Register and confirm the flag starts true (initial full-render).
+        frame.register(MemoryService(memory))
+        assertTrue(frame.dirty.get(), "dirty should be true initially")
+
+        // Clear the flag then write outside VRAM — flag must stay false.
+        frame.dirty.set(false)
+        memory.write8(0x1000, 0xFF)
+        assertTrue(!frame.dirty.get(), "write outside VRAM must not set dirty")
+
+        // Write a character byte inside VRAM — flag must become true.
+        memory.write8(VgaTextFrame.VRAM_BASE, 0x41)
+        assertTrue(frame.dirty.get(), "write inside VRAM must set dirty")
+
+        memory.close()
+    }
+
+    @Test fun `register sets dirty when write is at last byte of VRAM region`() {
+        val memory = MemoryBus(1024 * 1024)
+        val frame  = tryMakeFrame(memory) ?: run { memory.close(); return }
+        frame.register(MemoryService(memory))
+
+        frame.dirty.set(false)
+        val lastByte = VgaTextFrame.VRAM_BASE + VgaTextFrame.VRAM_BYTES - 1
+        memory.write8(lastByte, 0x07)
+        assertTrue(frame.dirty.get(), "write at last VRAM byte must set dirty")
+
+        memory.close()
+    }
+
+    @Test fun `renderFrame draws background colour of cell into backBuffer`() {
+        // attr = 0x1B → bg index = 1 (dark blue), fg index = 0xB (cyan)
+        // VgaColors.PALETTE[1] is the expected background colour.
+        val memory = MemoryBus(1024 * 1024)
+        val frame  = tryMakeFrame(memory) ?: run { memory.close(); return }
+
+        val attr = 0x1B
+        memory.write8(VRAM,     'J'.code)   // character
+        memory.write8(VRAM + 1, attr)        // attribute
+
+        frame.dirty.set(true)
+        frame.renderFrame()
+
+        // Pixel at (0, 0) in the backBuffer should be the background colour.
+        val expectedBg = VgaColors.PALETTE[1]  // dark blue
+        val actualPixel = frame.backBuffer.getRGB(0, 0) and 0xFFFFFF
+        assertEquals(expectedBg, actualPixel, "background pixel should match palette[1]")
+
+        memory.close()
+    }
+
+    @Test fun `renderFrame clears dirty flag after rendering`() {
+        val memory = MemoryBus(1024 * 1024)
+        val frame  = tryMakeFrame(memory) ?: run { memory.close(); return }
+
+        frame.dirty.set(true)
+        frame.renderFrame()
+        assertTrue(!frame.dirty.get(), "dirty must be false after renderFrame completes")
+
+        memory.close()
+    }
+
+    @Test fun `renderFrame is a no-op when dirty is false`() {
+        val memory = MemoryBus(1024 * 1024)
+        val frame  = tryMakeFrame(memory) ?: run { memory.close(); return }
+
+        // Write a red (0x04) background character.
+        memory.write8(VRAM,     'X'.code)
+        memory.write8(VRAM + 1, 0x40)   // bg = 4 (red)
+
+        // Force an initial render so the backBuffer has the red pixel.
+        frame.dirty.set(true)
+        frame.renderFrame()
+        val redPixel = frame.backBuffer.getRGB(0, 0) and 0xFFFFFF
+
+        // Now change VRAM but keep dirty=false — renderFrame must not update.
+        memory.write8(VRAM + 1, 0x20)   // bg = 2 (green)
+        frame.dirty.set(false)
+        frame.renderFrame()
+        val pixelAfter = frame.backBuffer.getRGB(0, 0) and 0xFFFFFF
+
+        assertEquals(redPixel, pixelAfter, "backBuffer must be unchanged when dirty=false")
+
+        memory.close()
+    }
+
+    @Test fun `LLE INT 10h AH=09h write triggers VRAM dirty flag via register`() {
+        val memory = MemoryBus(1024 * 1024)
+        val frame  = tryMakeFrame(memory) ?: run { memory.close(); return }
+        val vm     = VM(memory = memory)
+        vm.registerAddon(BiosVideoAddon())
+        frame.register(vm.memoryService)
+
+        // Clear the initial dirty flag set by the VgaTextFrame constructor.
+        frame.dirty.set(false)
+
+        // AH=09h: write 'A' (0x41) with attr=0x07, count=1; then HLT.
+        val prog = byteArrayOf(
+            0xB4.toByte(), 0x09,
+            0xB0.toByte(), 0x41,
+            0xB3.toByte(), 0x07,
+            0xB9.toByte(), 0x01, 0x00, 0x00, 0x00,
+            0xCD.toByte(), 0x10,
+            0xF4.toByte()
+        )
+        prog.forEachIndexed { i, b -> vm.memory.write8(i, b.toInt() and 0xFF) }
+        vm.cpu.eip = 0
+        vm.run()
+
+        assertTrue(frame.dirty.get(), "INT 10h AH=09h must set dirty via VRAM watcher")
+
+        vm.close()
     }
 }

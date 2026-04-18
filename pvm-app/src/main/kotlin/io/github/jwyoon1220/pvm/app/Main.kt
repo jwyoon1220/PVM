@@ -46,6 +46,24 @@ fun main() {
             println("[INT] INT 10h AH=0x${e.context.ah.toString(16).padStart(2,'0')} AL=0x${e.context.al.toString(16).padStart(2,'0')}")
         }
 
+        // VRAM write watcher: log printable character writes to stdout.
+        // Attribute-byte writes (odd offsets) are intentionally skipped to keep
+        // the output readable; only non-space glyph writes are reported.
+        vm.memoryService.addWatcher(
+            VgaTextFrame.VRAM_BASE until VgaTextFrame.VRAM_BASE + VgaTextFrame.VRAM_BYTES
+        ) { event ->
+            val offset = event.address - VgaTextFrame.VRAM_BASE
+            if (offset % 2 == 0) {           // character byte (not attribute)
+                val ch = event.value and 0xFF
+                if (ch > 0x20) {             // skip NUL and space
+                    val cell = offset / 2
+                    val row  = cell / VgaTextFrame.COLS
+                    val col  = cell % VgaTextFrame.COLS
+                    println(String.format("[VRAM] r=%02d c=%02d char=0x%02X '%c'", row, col, ch, ch.toChar()))
+                }
+            }
+        }
+
         vm.registerAddon(BiosVideoAddon())
         vm.registerAddon(BiosKeyboardAddon())
         vm.registerAddon(DosHleAddon())
