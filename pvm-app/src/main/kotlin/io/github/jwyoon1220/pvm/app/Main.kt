@@ -67,6 +67,11 @@ fun main() {
         println()
         println("=== VM halted ===")
         vm.cpu.dump()
+
+        // Stop the render timer and dispose the window BEFORE vm.close() releases
+        // the MemoryBus arena — otherwise the Swing EDT can fire a render tick on
+        // the already-closed MemoryBus and throw IllegalStateException.
+        display.stop()
     }
 }
 
@@ -80,8 +85,10 @@ fun main() {
 //   0x1B = cyan         (0xB) on blue (1)
 //   0x70 = black        (0x0) on light-grey (7)
 //
-// INT 10h AH=09h does NOT advance the cursor, so we follow every write with
-// AH=03h (get cursor) + ADD DL,1 + AH=02h (set cursor).
+// INT 10h AH=09h does NOT advance the cursor.  Rather than using ADD/INC
+// (arithmetic opcodes that may not yet be implemented), the Kotlin builder
+// tracks the column index and emits an explicit AH=02h set-cursor before
+// every character write.
 // ────────────────────────────────────────────────────────────────────────────
 
 private fun buildGraphicsModeProgram(): ByteArray {
@@ -101,9 +108,9 @@ private fun buildGraphicsModeProgram(): ByteArray {
     )
 
     for (row in rows) {
-        // AH=02h: set cursor to (row, col=0)
-        emit(0xB4.toByte(), 0x02, 0xB6.toByte(), row.row.toByte(), 0xB2.toByte(), 0x00, 0xCD.toByte(), 0x10)
-        for (ch in row.text) {
+        for ((col, ch) in row.text.withIndex()) {
+            // AH=02h: set cursor to exact (row, col) — avoids unsupported ADD opcode
+            emit(0xB4.toByte(), 0x02, 0xB6.toByte(), row.row.toByte(), 0xB2.toByte(), col.toByte(), 0xCD.toByte(), 0x10)
             // AH=09h: write char+attr, CX=1
             emit(
                 0xB4.toByte(), 0x09,
@@ -111,12 +118,6 @@ private fun buildGraphicsModeProgram(): ByteArray {
                 0xB3.toByte(), row.attr.toByte(),
                 0xB9.toByte(), 0x01, 0x00, 0x00, 0x00,
                 0xCD.toByte(), 0x10
-            )
-            // Advance cursor: AH=03h get, ADD DL,1, AH=02h set
-            emit(
-                0xB4.toByte(), 0x03, 0xCD.toByte(), 0x10,
-                0x80.toByte(), 0xC2.toByte(), 0x01,
-                0xB4.toByte(), 0x02, 0xCD.toByte(), 0x10
             )
         }
     }
